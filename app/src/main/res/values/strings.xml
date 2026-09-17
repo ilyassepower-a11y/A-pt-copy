@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Pizza Escape</string>
+    <string name="game_title">PIZZA ESCAPE</string>
+    <string name="game_subtitle">هروب برج البيتزا</string>
+    <string name="start_escape">ابدأ الهروب (START ESCAPE)</string>
+    <string name="time_left">الوقت المتبقي</string>
+    <string name="escape_survived">نجوت من المطارد!</string>
+    <string name="caught_by_pursuer">أمسك بك المطارد!</string>
+    <string name="retry">حاول مجدداً</string>
+    <string name="mach_speed">سرعة MACH</string>
+</resources>

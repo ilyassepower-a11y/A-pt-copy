@@ -1,0 +1,6 @@
+{
+  "name": "Pizza Escape",
+  "description": "A high-speed Pizza Tower inspired arcade escape game where you run, Mach dash, and dodge the terrifying pursuer until the timer runs out!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
