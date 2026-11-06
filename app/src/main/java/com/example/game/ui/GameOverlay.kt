@@ -10,6 +10,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,6 +46,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -58,10 +64,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import com.example.game.engine.PizzaEscapeEngine
 import com.example.game.haptics.HapticsManager
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 @Composable
 fun GameOverlay(
@@ -319,34 +327,19 @@ fun GameOverlay(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
-            // Directional Buttons (Left & Right)
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                // Left Arrow
-                ArcadeHoldButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    testTag = "btn_left",
-                    color = Color(0xFF37474F),
-                    onPressChange = { isPressed ->
-                        engine.inputLeft = isPressed
-                        if (isPressed) haptics.lightTap()
-                    }
-                )
-
-                // Right Arrow
-                ArcadeHoldButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowForward,
-                    testTag = "btn_right",
-                    color = Color(0xFF37474F),
-                    onPressChange = { isPressed ->
-                        engine.inputRight = isPressed
-                        if (isPressed) haptics.lightTap()
-                    }
-                )
-            }
+            // Joystick: left / right to run, pull down to slide / slam
+            ArcadeJoystick(
+                onDirection = { left, right, down ->
+                    engine.inputLeft = left
+                    engine.inputRight = right
+                    engine.inputDown = down
+                }
+            )
 
             // Action Buttons (Mach Dash, Taunt Parry, Slide Slam, Jump)
             Column(
@@ -361,7 +354,7 @@ fun GameOverlay(
                         label = "PARRY",
                         testTag = "btn_taunt",
                         color = Color(0xFFAB47BC),
-                        size = 54.dp,
+                        size = 60.dp,
                         onTap = {
                             haptics.lightTap()
                             engine.triggerTaunt()
@@ -374,7 +367,7 @@ fun GameOverlay(
                         label = "MACH",
                         testTag = "btn_dash",
                         color = Color(0xFFFF5722),
-                        size = 58.dp,
+                        size = 64.dp,
                         onPressChange = { isPressed ->
                             engine.inputDash = isPressed
                             if (isPressed) haptics.lightTap()
@@ -382,28 +375,15 @@ fun GameOverlay(
                     )
                 }
 
-                // Bottom Row: Slide / Down + JUMP
+                // Bottom Row: JUMP
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Slide / Downward Slam Button
-                    ArcadeHoldButton(
-                        icon = Icons.Default.ArrowDownward,
-                        label = "SLAM",
-                        testTag = "btn_down",
-                        color = Color(0xFF5D4037),
-                        size = 54.dp,
-                        onPressChange = { isPressed ->
-                            engine.inputDown = isPressed
-                            if (isPressed) haptics.lightTap()
-                        }
-                    )
-
                     // Big JUMP Button
                     ArcadeTapButton(
                         icon = Icons.Default.LocalFireDepartment,
                         label = "JUMP",
                         testTag = "btn_jump",
                         color = Color(0xFF2E7D32),
-                        size = 68.dp,
+                        size = 84.dp,
                         onTap = {
                             haptics.lightTap()
                             engine.jump()
@@ -515,11 +495,9 @@ fun ArcadeTapButton(
                 detectTapGestures(
                     onPress = {
                         isPressed = true
+                        onTap() // react the moment the finger touches the button
                         tryAwaitRelease()
                         isPressed = false
-                    },
-                    onTap = {
-                        onTap()
                     }
                 )
             }
@@ -541,5 +519,85 @@ fun ArcadeTapButton(
                 fontSize = 9.sp
             )
         }
+    }
+}
+
+@Composable
+fun ArcadeJoystick(
+    onDirection: (left: Boolean, right: Boolean, down: Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    baseSize: androidx.compose.ui.unit.Dp = 140.dp
+) {
+    var knob by remember { mutableStateOf(Offset.Zero) }
+    var isActive by remember { mutableStateOf(false) }
+
+    // Make sure the character stops if the joystick disappears (game over, pause, menu)
+    DisposableEffect(Unit) {
+        onDispose { onDirection(false, false, false) }
+    }
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(baseSize)
+            .background(Color(0x66000000), CircleShape)
+            .border(2.5.dp, if (isActive) Color.White else Color(0x88FFFFFF), CircleShape)
+            .testTag("joystick")
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val first = awaitFirstDown(requireUnconsumed = false)
+                    first.consume()
+                    isActive = true
+
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    // How far the knob can travel (stays inside the round base)
+                    val maxTravel = size.width / 2f * 0.6f
+
+                    fun handle(pos: Offset) {
+                        var dx = pos.x - center.x
+                        var dy = pos.y - center.y
+                        val dist = sqrt(dx * dx + dy * dy)
+                        if (dist > maxTravel) {
+                            dx = dx / dist * maxTravel
+                            dy = dy / dist * maxTravel
+                        }
+                        knob = Offset(dx, dy)
+                        onDirection(
+                            dx < -maxTravel * 0.3f,
+                            dx > maxTravel * 0.3f,
+                            dy > maxTravel * 0.6f
+                        )
+                    }
+
+                    handle(first.position)
+
+                    var pressed = true
+                    while (pressed) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == first.id }
+                        if (change == null || !change.pressed) {
+                            pressed = false
+                        } else {
+                            handle(change.position)
+                            change.consume()
+                        }
+                    }
+
+                    knob = Offset.Zero
+                    isActive = false
+                    onDirection(false, false, false)
+                }
+            }
+    ) {
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(knob.x.roundToInt(), knob.y.roundToInt()) }
+                .size(baseSize * 0.4f)
+                .background(
+                    brush = Brush.radialGradient(listOf(Color(0xFFFFD54F), Color(0xFFFF6F00))),
+                    shape = CircleShape
+                )
+                .border(2.dp, Color.White, CircleShape)
+        )
     }
 }

@@ -51,11 +51,12 @@ fun GameCanvasView(
         drawTowerBackground(camX, camY, screenW, screenH, engine.pursuer.state == PursuerState.ENRAGED)
 
         // 2. World Elements with Camera Transform
+        // Zoom so the characters are a good size on a tall portrait screen
+        val zoom = (screenW / 720f).coerceIn(0.6f, 3f)
         withTransform({
-            translate(
-                left = -camX + screenW / 2f,
-                top = -camY + screenH / 2f
-            )
+            translate(left = screenW / 2f, top = screenH / 2f)
+            scale(scaleX = zoom, scaleY = zoom, pivot = Offset.Zero)
+            translate(left = -camX, top = -camY)
         }) {
             // Platforms
             for (p in engine.platforms) {
@@ -88,7 +89,7 @@ fun GameCanvasView(
 
         // 3. Proximity Danger Vignette & Offscreen Pursuer Radar
         drawDangerVignette(screenW, screenH, engine.stats.pursuerDistance)
-        drawPursuerOffscreenIndicator(screenW, screenH, camX, camY, engine.pursuer.x, engine.pursuer.y)
+        drawPursuerOffscreenIndicator(screenW, screenH, camX, camY, engine.pursuer.x, engine.pursuer.y, zoom)
     }
 }
 
@@ -570,11 +571,12 @@ private fun DrawScope.drawPursuerOffscreenIndicator(
     camX: Float,
     camY: Float,
     pursuerX: Float,
-    pursuerY: Float
+    pursuerY: Float,
+    zoom: Float
 ) {
-    // Relative to screen center
-    val relX = pursuerX - camX
-    val relY = pursuerY - camY
+    // Relative to screen center (in screen pixels)
+    val relX = (pursuerX - camX) * zoom
+    val relY = (pursuerY - camY) * zoom
 
     val halfW = screenW / 2f - 40f
     val halfH = screenH / 2f - 70f

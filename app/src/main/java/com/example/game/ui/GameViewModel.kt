@@ -110,11 +110,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             var lastTime = System.nanoTime()
             while (isActive) {
                 val currentTime = System.nanoTime()
-                val dt = ((currentTime - lastTime) / 1_000_000_000.0).toFloat().coerceIn(0.001f, 0.04f)
+                val realDt = ((currentTime - lastTime) / 1_000_000_000.0).toFloat()
+                val dt = realDt.coerceIn(0.001f, 0.04f)
                 lastTime = currentTime
 
                 if (engine.gameState == GameState.RUNNING) {
-                    engine.update(dt)
+                    engine.update(dt, realDt)
                     _gameTick.value = currentTime
                 }
                 _gameState.value = engine.gameState
