@@ -70,6 +70,7 @@ fun GameOverlay(
     isMuted: Boolean,
     onToggleMute: () -> Unit,
     onPauseClick: () -> Unit,
+    hudTick: Long = 0L,
     modifier: Modifier = Modifier
 ) {
     val stats = engine.stats

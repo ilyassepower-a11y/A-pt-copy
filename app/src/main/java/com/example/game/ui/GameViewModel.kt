@@ -35,6 +35,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _gameTick = MutableStateFlow(0L)
     val gameTick: StateFlow<Long> = _gameTick.asStateFlow()
 
+    // Tells the UI when the screen (menu / running / paused / game over) changes
+    private val _gameState = MutableStateFlow(GameState.MENU)
+    val gameState: StateFlow<GameState> = _gameState.asStateFlow()
+
     init {
         setupEngineCallbacks()
         startGameLoop()
@@ -102,7 +106,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun startGameLoop() {
-        viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch {
             var lastTime = System.nanoTime()
             while (isActive) {
                 val currentTime = System.nanoTime()
@@ -113,6 +117,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     engine.update(dt)
                     _gameTick.value = currentTime
                 }
+                _gameState.value = engine.gameState
 
                 delay(16) // ~60 FPS
             }

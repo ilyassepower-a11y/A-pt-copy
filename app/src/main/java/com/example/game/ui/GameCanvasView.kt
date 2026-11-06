@@ -3,6 +3,7 @@ package com.example.game.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -29,9 +30,13 @@ import kotlin.random.Random
 @Composable
 fun GameCanvasView(
     engine: PizzaEscapeEngine,
+    tick: State<Long>,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
+        // Read the frame tick here so only the drawing is redone each frame
+        tick.value
+
         val screenW = size.width
         val screenH = size.height
 

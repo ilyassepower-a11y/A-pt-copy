@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.game.model.GameState
@@ -14,12 +16,16 @@ fun PizzaEscapeApp(
     viewModel: GameViewModel = viewModel()
 ) {
     val engine = viewModel.engine
-    val tick by viewModel.gameTick.collectAsState()
+    val tickState = viewModel.gameTick.collectAsState()
+    val gameState by viewModel.gameState.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
     val saveData by viewModel.saveData.collectAsState()
 
+    // The HUD only needs to refresh ~10 times per second (the canvas redraws every frame)
+    val hudTick by remember { derivedStateOf { tickState.value / 100_000_000L } }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        when (engine.gameState) {
+        when (gameState) {
             GameState.MENU -> {
                 MenuScreen(
                     saveData = saveData,
@@ -30,11 +36,8 @@ fun PizzaEscapeApp(
                 )
             }
             GameState.RUNNING, GameState.PAUSED, GameState.GAME_OVER, GameState.VICTORY -> {
-                // Read tick to trigger recomposition / frame update
-                val currentFrame = tick
-
-                // Game Canvas
-                GameCanvasView(engine = engine)
+                // Game Canvas (redraws every frame without recomposing the whole screen)
+                GameCanvasView(engine = engine, tick = tickState)
 
                 // Overlay HUD & Controls
                 GameOverlay(
@@ -42,11 +45,12 @@ fun PizzaEscapeApp(
                     haptics = viewModel.hapticsManager,
                     isMuted = isMuted,
                     onToggleMute = { viewModel.toggleMute() },
-                    onPauseClick = { viewModel.pauseGame() }
+                    onPauseClick = { viewModel.pauseGame() },
+                    hudTick = hudTick
                 )
 
                 // Dialogs
-                when (engine.gameState) {
+                when (gameState) {
                     GameState.PAUSED -> {
                         PauseDialog(
                             onResume = { viewModel.resumeGame() },
