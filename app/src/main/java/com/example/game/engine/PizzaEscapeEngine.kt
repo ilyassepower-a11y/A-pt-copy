@@ -62,6 +62,8 @@ class PizzaEscapeEngine(
     var onVictoryEvent: (() -> Unit)? = null
 
     private var alertSoundCooldown = 0f
+    private var coyoteTimer = 0f
+    private var jumpBufferTimer = 0f
     private val random = Random(System.currentTimeMillis())
 
     init {
@@ -88,6 +90,8 @@ class PizzaEscapeEngine(
         player.hotPepperTimer = 0f
         player.invincibilityTimer = 1.5f // brief initial grace
         player.runCycle = 0f
+        coyoteTimer = 0f
+        jumpBufferTimer = 0f
 
         pursuer.x = 2200f
         pursuer.y = 400f
@@ -202,26 +206,31 @@ class PizzaEscapeEngine(
     fun jump() {
         if (gameState != GameState.RUNNING) return
 
-        if (player.isGrounded) {
-            // Normal / Mach jump
+        if (player.isGrounded || coyoteTimer > 0f) {
+            // Normal / Mach jump (higher than before so the floors are reachable)
             val jumpPower = when (player.machLevel) {
-                4 -> -860f
-                3 -> -820f
-                2 -> -780f
-                else -> -730f
+                4 -> -1050f
+                3 -> -1000f
+                2 -> -960f
+                else -> -920f
             }
             player.vy = jumpPower
             player.isGrounded = false
+            coyoteTimer = 0f
+            jumpBufferTimer = 0f
             spawnJumpParticles()
             onJumpEvent?.invoke()
         } else if (player.isTouchingWall) {
             // Wall Kick / Wall Jump
-            player.vy = -800f
+            player.vy = -900f
             player.vx = -player.wallDirection * 620f
             player.facingRight = player.wallDirection < 0
             player.machLevel = maxOf(player.machLevel, 2)
             spawnWallHitParticles(player.x, player.y - 30f)
             onJumpEvent?.invoke()
+        } else {
+            // Pressed a bit early: remember it for a moment and jump on landing
+            jumpBufferTimer = 0.15f
         }
     }
 
@@ -295,13 +304,14 @@ class PizzaEscapeEngine(
         }
     }
 
-    fun update(dt: Float) {
+    fun update(dt: Float, realDt: Float = dt) {
         if (gameState != GameState.RUNNING) return
 
         val clampedDt = dt.coerceIn(0.001f, 0.05f)
 
         // 1. Countdown Timer (عليك الهروب حتى ينفذ الوقت)
-        stats.timeRemaining -= clampedDt
+        // Uses the real elapsed time so the countdown always ends, even if the phone lags
+        stats.timeRemaining -= realDt.coerceIn(0.001f, 0.5f)
         if (stats.timeRemaining <= 0f) {
             stats.timeRemaining = 0f
             triggerVictory()
@@ -524,7 +534,7 @@ class PizzaEscapeEngine(
 
                     // Bouncy mushroom platform
                     if (p.type == PlatformType.BOUNCY_MUSHROOM) {
-                        player.vy = -1050f
+                        player.vy = -1350f
                         player.isGrounded = false
                         spawnBounceParticles(p.x + p.width / 2, p.top)
                         onBounceEvent?.invoke()
@@ -550,6 +560,20 @@ class PizzaEscapeEngine(
             player.y = worldHeight - 60f
             player.vy = 0f
             player.isGrounded = true
+        }
+
+        // Coyote time + jump buffer (makes jumping feel responsive)
+        if (player.isGrounded) {
+            coyoteTimer = 0.1f
+        } else {
+            coyoteTimer = (coyoteTimer - dt).coerceAtLeast(0f)
+        }
+        if (jumpBufferTimer > 0f) {
+            jumpBufferTimer -= dt
+            if (player.isGrounded) {
+                jumpBufferTimer = 0f
+                jump()
+            }
         }
     }
 
