@@ -82,7 +82,8 @@ fun GameOverlay(
     modifier: Modifier = Modifier
 ) {
     val stats = engine.stats
-    val timeLeft = stats.timeRemaining
+    // hudTick changes ~10 times per second, which makes the HUD refresh (time, score, combo...)
+    val timeLeft = remember(hudTick) { stats.timeRemaining }
     val isUrgent = timeLeft < 15f
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")

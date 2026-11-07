@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -462,77 +463,185 @@ private fun DrawScope.drawPursuer(engine: PizzaEscapeEngine) {
     val cx = pursuer.x
     val cy = pursuer.y
     val r = pursuer.radius
+    val phase = pursuer.floatPhase
 
     val isStunned = pursuer.state == PursuerState.STUNNED
     val isEnraged = pursuer.state == PursuerState.ENRAGED
 
-    // Sinister Dark Aura
+    // Dark pulsing aura
+    val pulse = 1f + 0.06f * sin(phase * 5f)
     val auraColor = when {
-        isStunned -> Color(0x33FFEB3B)
-        isEnraged -> Color(0x77D50000)
-        else -> Color(0x55E65100)
+        isStunned -> Color(0x55FFEB3B)
+        isEnraged -> Color(0xCCD50000)
+        else -> Color(0x99B71C1C)
     }
-    drawCircle(auraColor, r * 1.4f, Offset(cx, cy))
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(auraColor, Color.Transparent),
+            center = Offset(cx, cy),
+            radius = r * 2.0f * pulse
+        ),
+        radius = r * 2.0f * pulse,
+        center = Offset(cx, cy)
+    )
 
-    // Pizza Face Crust Outer Ring
-    drawCircle(Color(0xFFB71C1C), r, Offset(cx, cy))
-    // Cheesy face interior
-    val cheeseColor = if (isEnraged) Color(0xFFFF7043) else Color(0xFFFFD54F)
-    drawCircle(cheeseColor, r * 0.88f, Offset(cx, cy))
+    val outline = Color(0xFF140703)
+    val crustColor = when {
+        isStunned -> Color(0xFF7A7A7A)
+        isEnraged -> Color(0xFF9C2A12)
+        else -> Color(0xFFB8683A)
+    }
+    val cheeseInner = when {
+        isStunned -> Color(0xFFB0B0B0)
+        isEnraged -> Color(0xFFE4572E)
+        else -> Color(0xFFF2C86B)
+    }
+    val cheeseOuter = when {
+        isStunned -> Color(0xFF6E6E6E)
+        isEnraged -> Color(0xFF8E1B0A)
+        else -> Color(0xFFB5792F)
+    }
+    val pepperGreen = if (isStunned) Color(0xFF6E7F6E) else Color(0xFF4CAF50)
 
-    // Menacing Pepperoni Spots
-    drawCircle(Color(0xFFB71C1C), 9f, Offset(cx - r * 0.5f, cy - r * 0.2f))
-    drawCircle(Color(0xFFB71C1C), 8f, Offset(cx + r * 0.5f, cy - r * 0.3f))
-    drawCircle(Color(0xFFB71C1C), 7f, Offset(cx, cy + r * 0.5f))
+    // Small helper: a thick rounded stroke with a dark outline (looks like a pepper strip)
+    fun pepper(path: Path, width: Float) {
+        drawPath(path, outline, style = Stroke(width = width * 1.5f, cap = StrokeCap.Round))
+        drawPath(path, pepperGreen, style = Stroke(width = width, cap = StrokeCap.Round))
+    }
 
-    if (isStunned) {
-        // Dizzy spiral / X eyes
-        drawLine(Color.Black, Offset(cx - 20f, cy - 14f), Offset(cx - 8f, cy - 2f), strokeWidth = 4f)
-        drawLine(Color.Black, Offset(cx - 8f, cy - 14f), Offset(cx - 20f, cy - 2f), strokeWidth = 4f)
-        drawLine(Color.Black, Offset(cx + 8f, cy - 14f), Offset(cx + 20f, cy - 2f), strokeWidth = 4f)
-        drawLine(Color.Black, Offset(cx + 20f, cy - 14f), Offset(cx + 8f, cy - 2f), strokeWidth = 4f)
+    // Crust + shaded cheese
+    drawCircle(crustColor, r, Offset(cx, cy))
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(cheeseInner, cheeseOuter),
+            center = Offset(cx - r * 0.15f, cy - r * 0.2f),
+            radius = r * 0.95f
+        ),
+        radius = r * 0.84f,
+        center = Offset(cx, cy)
+    )
+    drawCircle(outline, r * 0.84f, Offset(cx, cy), style = Stroke(width = r * 0.04f))
+    drawCircle(outline, r, Offset(cx, cy), style = Stroke(width = r * 0.05f))
 
-        // Orbiting yellow cartoon stars
-        for (i in 0 until 4) {
-            val starAngle = pursuer.floatPhase * 3f + (i * PI.toFloat() / 2f)
-            val sx = cx + cos(starAngle) * (r + 18f)
-            val sy = cy + sin(starAngle) * (r + 14f)
-            drawCircle(Color(0xFFFFEB3B), 6f, Offset(sx, sy))
-        }
-    } else {
-        // Glowing Menacing Eyes
-        val eyeColor = if (isEnraged) Color(0xFFFF1744) else Color(0xFFFFEB3B)
-        val eyeGlowColor = if (isEnraged) Color(0xFFFF5252) else Color(0xFFFFF59D)
-
-        // Eye glow
-        drawCircle(eyeGlowColor, 12f, Offset(cx - 14f, cy - 8f))
-        drawCircle(eyeGlowColor, 12f, Offset(cx + 14f, cy - 8f))
-
-        // Piercing pupils tracking player
-        val pupilAngle = pursuer.angle
-        val px = cos(pupilAngle) * 4f
-        val py = sin(pupilAngle) * 4f
-        drawCircle(Color.Black, 5f, Offset(cx - 14f + px, cy - 8f + py))
-        drawCircle(Color.Black, 5f, Offset(cx + 14f + px, cy - 8f + py))
-
-        // Maniacal Grinning Mouth with razor cheese teeth!
-        val mouthPath = Path().apply {
-            moveTo(cx - 24f, cy + 8f)
-            quadraticTo(cx, cy + 28f, cx + 24f, cy + 8f)
-            quadraticTo(cx, cy + 14f, cx - 24f, cy + 8f)
-            close()
-        }
-        drawPath(mouthPath, Color(0xFF212121))
-
-        // Razor Sharp Teeth
-        for (tx in -16..16 step 8) {
+    // Pineapple-ring eyes
+    val eyeR = r * 0.25f
+    val eyeY = cy - r * 0.14f
+    val ringColor = when {
+        isStunned -> Color(0xFFC9C6A0)
+        isEnraged -> Color(0xFFFFB300)
+        else -> Color(0xFFFFD54F)
+    }
+    val ringRim = when {
+        isStunned -> Color(0xFF8A8870)
+        isEnraged -> Color(0xFFB85C00)
+        else -> Color(0xFFE09B00)
+    }
+    val holeColor = if (isStunned) Color(0xFF4A4A4A) else Color(0xFF1A0A04)
+    val glow = if (isEnraged) Color(0xFFFF1744) else Color(0xFFFFEB3B)
+    val px = cos(pursuer.angle) * r * 0.03f
+    val py = sin(pursuer.angle) * r * 0.02f
+    for (sx in listOf(-1f, 1f)) {
+        val ex = cx + sx * r * 0.4f
+        drawCircle(ringColor, eyeR, Offset(ex, eyeY))
+        // fibres of the pineapple slice
+        for (f in 0 until 10) {
+            val fa = f * 2f * PI.toFloat() / 10f
             drawLine(
-                color = Color.White,
-                start = Offset(cx + tx, cy + 12f),
-                end = Offset(cx + tx + 4f, cy + 18f),
-                strokeWidth = 3f
+                ringRim,
+                Offset(ex + cos(fa) * eyeR * 0.5f, eyeY + sin(fa) * eyeR * 0.5f),
+                Offset(ex + cos(fa) * eyeR * 0.88f, eyeY + sin(fa) * eyeR * 0.88f),
+                strokeWidth = r * 0.025f
             )
         }
+        drawCircle(ringRim, eyeR, Offset(ex, eyeY), style = Stroke(width = r * 0.05f))
+        drawCircle(outline, eyeR, Offset(ex, eyeY), style = Stroke(width = r * 0.025f))
+        // dark core of the slice
+        drawCircle(holeColor, eyeR * 0.4f, Offset(ex, eyeY))
+        if (isStunned) {
+            drawLine(outline, Offset(ex - eyeR * 0.5f, eyeY - eyeR * 0.5f), Offset(ex + eyeR * 0.5f, eyeY + eyeR * 0.5f), strokeWidth = r * 0.07f)
+            drawLine(outline, Offset(ex + eyeR * 0.5f, eyeY - eyeR * 0.5f), Offset(ex - eyeR * 0.5f, eyeY + eyeR * 0.5f), strokeWidth = r * 0.07f)
+        } else {
+            // glowing slit pupil in the core that follows the player
+            drawCircle(glow.copy(alpha = 0.45f), eyeR * 0.34f, Offset(ex + px, eyeY + py))
+            drawLine(glow, Offset(ex + px, eyeY + py - eyeR * 0.28f), Offset(ex + px, eyeY + py + eyeR * 0.28f), strokeWidth = r * 0.045f)
+        }
+    }
+
+    // Angry pepper brows
+    for (sx in listOf(-1f, 1f)) {
+        val brow = Path().apply {
+            moveTo(cx + sx * r * 0.8f, cy - r * 0.5f)
+            quadraticTo(cx + sx * r * 0.5f, cy - r * 0.78f, cx + sx * r * 0.08f, cy - r * 0.3f)
+        }
+        pepper(brow, r * 0.1f)
+    }
+
+    // Little nose
+    drawCircle(Color(0xFFC9854F), r * 0.1f, Offset(cx, cy + r * 0.14f))
+    drawCircle(outline, r * 0.1f, Offset(cx, cy + r * 0.14f), style = Stroke(width = r * 0.03f))
+
+    if (isStunned) {
+        // Flat dazed mouth
+        drawLine(outline, Offset(cx - r * 0.35f, cy + r * 0.5f), Offset(cx + r * 0.35f, cy + r * 0.45f), strokeWidth = r * 0.07f)
+
+        // Orbiting pale stars
+        for (i in 0 until 4) {
+            val starAngle = phase * 3f + (i * PI.toFloat() / 2f)
+            val sx = cx + cos(starAngle) * (r + 18f)
+            val sy = cy + sin(starAngle) * (r + 14f)
+            drawCircle(Color(0xFFFFF59D), r * 0.1f, Offset(sx, sy))
+        }
+    } else {
+        // Wide grinning mouth
+        val mouth = Path().apply {
+            moveTo(cx - r * 0.64f, cy + r * 0.26f)
+            quadraticTo(cx, cy + r * 0.4f, cx + r * 0.64f, cy + r * 0.26f)
+            quadraticTo(cx, cy + r * 1.15f, cx - r * 0.64f, cy + r * 0.26f)
+            close()
+        }
+        drawPath(mouth, Color(0xFF0A0303))
+
+        val toothColor = Color(0xFFEFE6D2)
+        // Top fangs hang from the upper lip
+        for (k in 0 until 11) {
+            val t = (k + 0.5f) / 11f
+            val tx = cx + r * (-0.64f + 1.28f * t)
+            val ty = cy + r * (0.26f + 0.28f * t * (1f - t))
+            val len = if (k % 2 == 0) 0.18f else 0.12f
+            val tooth = Path().apply {
+                moveTo(tx - r * 0.06f, ty)
+                lineTo(tx + r * 0.06f, ty)
+                lineTo(tx, ty + r * len)
+                close()
+            }
+            drawPath(tooth, toothColor)
+        }
+        // Bottom teeth point up from the lower lip
+        for (j in 0 until 8) {
+            val t = (j + 0.5f) / 8f
+            val tx = cx + r * (-0.64f + 1.28f * t)
+            val ty = cy + r * (0.26f + 1.78f * t * (1f - t))
+            val len = if (j % 2 == 0) 0.15f else 0.1f
+            val tooth = Path().apply {
+                moveTo(tx - r * 0.065f, ty)
+                lineTo(tx + r * 0.065f, ty)
+                lineTo(tx, ty - r * len)
+                close()
+            }
+            drawPath(tooth, toothColor)
+        }
+
+        // Green pepper lips
+        val upperLip = Path().apply {
+            moveTo(cx - r * 0.64f, cy + r * 0.26f)
+            quadraticTo(cx, cy + r * 0.4f, cx + r * 0.64f, cy + r * 0.26f)
+        }
+        val lowerLip = Path().apply {
+            moveTo(cx + r * 0.64f, cy + r * 0.26f)
+            quadraticTo(cx, cy + r * 1.15f, cx - r * 0.64f, cy + r * 0.26f)
+        }
+        pepper(upperLip, r * 0.09f)
+        pepper(lowerLip, r * 0.1f)
     }
 }
 
