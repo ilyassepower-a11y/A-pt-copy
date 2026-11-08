@@ -1,8 +1,11 @@
 package com.example.game.audio
 
+import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.media.MediaPlayer
+import com.example.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,9 +16,13 @@ import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
 
-class SoundManager {
+class SoundManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default)
     var isMuted: Boolean = false
+        set(value) {
+            field = value
+            applyMusicVolume()
+        }
     private var musicJob: Job? = null
     private val sampleRate = 22050
 
@@ -85,46 +92,143 @@ class SoundManager {
             playToneSweep(440.0, 90.0, 0.45f, 0.8f)
             playNoiseCrunch(0.35f, 0.8f)
         }
+        playJingle(R.raw.jingle_gameover)
     }
 
     fun playVictory() {
-        if (isMuted) return
-        scope.launch {
-            val notes = listOf(523.25, 659.25, 783.99, 1046.50, 1318.51)
-            for (freq in notes) {
-                playTone(freq, 0.12f, 0.6f)
-                delay(90)
-            }
-            playTone(1567.98, 0.4f, 0.7f)
-        }
+        playJingle(R.raw.jingle_victory)
+    }
+
+    // ---------------- Soundtrack (OGG files in res/raw) ----------------
+    private var music: MediaPlayer? = null
+    private var currentMusicRes = 0
+    private var jingle: MediaPlayer? = null
+    private var musicSuspended = false
+    private val musicVolume = 0.55f
+
+    fun startMenuBgm() {
+        releaseJingle()
+        playMusic(R.raw.music_menu)
     }
 
     fun startEscapeBgm(urgent: Boolean) {
-        musicJob?.cancel()
-        musicJob = scope.launch {
-            var step = 0
-            val bassFreqs = listOf(110.0, 110.0, 130.8, 146.8, 110.0, 164.8, 146.8, 123.5)
-            val urgentBass = listOf(146.8, 146.8, 174.6, 196.0, 220.0, 196.0, 174.6, 164.8)
-            while (isActive) {
-                if (!isMuted) {
-                    val list = if (urgent) urgentBass else bassFreqs
-                    val freq = list[step % list.size]
-                    val duration = if (urgent) 0.12f else 0.18f
-                    playTone(freq, duration, if (urgent) 0.35f else 0.25f)
-                    
-                    if (step % 2 == 1) {
-                        playNoiseCrunch(0.04f, 0.2f)
-                    }
+        releaseJingle()
+        playMusic(if (urgent) R.raw.music_urgent else R.raw.music_escape)
+    }
+
+    fun stopBgm() {
+        releaseMusic()
+    }
+
+    // The app went to the background: silence everything
+    fun suspendMusic() {
+        musicSuspended = true
+        try {
+            music?.let { if (it.isPlaying) it.pause() }
+        } catch (e: Exception) {
+        }
+        try {
+            jingle?.let { if (it.isPlaying) it.pause() }
+        } catch (e: Exception) {
+        }
+    }
+
+    // The app is back on screen
+    fun resumeMusic() {
+        musicSuspended = false
+        applyMusicVolume()
+        try {
+            jingle?.let { if (!it.isPlaying && !isMuted) it.start() }
+        } catch (e: Exception) {
+        }
+    }
+
+    fun release() {
+        releaseMusic()
+        releaseJingle()
+    }
+
+    private fun playMusic(resId: Int) {
+        if (music != null && currentMusicRes == resId) {
+            applyMusicVolume()
+            return
+        }
+        releaseMusic()
+        try {
+            val player = MediaPlayer.create(context, resId) ?: return
+            player.isLooping = true
+            music = player
+            currentMusicRes = resId
+            applyMusicVolume()
+        } catch (e: Exception) {
+            music = null
+            currentMusicRes = 0
+        }
+    }
+
+    private fun applyMusicVolume() {
+        val player = music ?: return
+        try {
+            val volume = if (isMuted) 0f else musicVolume
+            player.setVolume(volume, volume)
+            if (isMuted || musicSuspended) {
+                if (player.isPlaying) player.pause()
+            } else if (!player.isPlaying) {
+                player.start()
+            }
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun playJingle(resId: Int) {
+        releaseJingle()
+        if (isMuted) return
+        try {
+            val player = MediaPlayer.create(context, resId) ?: return
+            player.setVolume(0.9f, 0.9f)
+            player.setOnCompletionListener { finished ->
+                try {
+                    finished.release()
+                } catch (e: Exception) {
                 }
-                step++
-                delay(if (urgent) 140L else 210L)
+                if (jingle === finished) jingle = null
+            }
+            jingle = player
+            if (!musicSuspended) player.start()
+        } catch (e: Exception) {
+            jingle = null
+        }
+    }
+
+    private fun releaseMusic() {
+        val player = music
+        music = null
+        currentMusicRes = 0
+        if (player != null) {
+            try {
+                player.stop()
+            } catch (e: Exception) {
+            }
+            try {
+                player.release()
+            } catch (e: Exception) {
             }
         }
     }
 
-    fun stopBgm() {
-        musicJob?.cancel()
-        musicJob = null
+    private fun releaseJingle() {
+        val player = jingle
+        jingle = null
+        if (player != null) {
+            try {
+                player.stop()
+            } catch (e: Exception) {
+            }
+            try {
+                player.release()
+            } catch (e: Exception) {
+            }
+        }
     }
 
     private fun playTone(frequency: Double, durationSeconds: Float, volume: Float) {
