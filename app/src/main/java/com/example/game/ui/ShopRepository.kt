@@ -7,9 +7,12 @@ import android.content.SharedPreferences
 data class ShopState(
     val balance: Int = 0,
     val inventory: Map<String, Int> = emptyMap(),
-    val claimed: Set<String> = emptySet()
+    val claimed: Set<String> = emptySet(),
+    val ownedSkins: Set<String> = setOf("chef"),
+    val selectedSkin: String = "chef"
 ) {
     fun count(item: PowerUp): Int = inventory[item.id] ?: 0
+    fun owns(skin: Skin): Boolean = skin.id in ownedSkins
 }
 
 class ShopRepository(context: Context) {
@@ -29,7 +32,11 @@ class ShopRepository(context: Context) {
             inventory[item.id] = prefs.getInt("inv_" + item.id, 0)
         }
         val claimed = HashSet<String>(prefs.getStringSet("claimed_milestones", emptySet()) ?: emptySet())
-        return ShopState(prefs.getInt("shop_balance", 0), inventory, claimed)
+        val owned = HashSet<String>(prefs.getStringSet("owned_skins", emptySet()) ?: emptySet())
+        owned.add("chef")
+        var selected = prefs.getString("selected_skin", "chef") ?: "chef"
+        if (selected !in owned) selected = "chef"
+        return ShopState(prefs.getInt("shop_balance", 0), inventory, claimed, owned, selected)
     }
 
     fun addToppings(amount: Int) {
@@ -63,5 +70,39 @@ class ShopRepository(context: Context) {
             .putInt("shop_balance", prefs.getInt("shop_balance", 0) + milestone.reward)
             .apply()
         return true
+    }
+
+    fun buySkin(skin: Skin): Boolean {
+        if (skin.adminOnly || skin.price <= 0) return false
+        val owned = HashSet<String>(prefs.getStringSet("owned_skins", emptySet()) ?: emptySet())
+        if (skin.id in owned) return false
+        val balance = prefs.getInt("shop_balance", 0)
+        if (balance < skin.price) return false
+        owned.add(skin.id)
+        prefs.edit()
+            .putInt("shop_balance", balance - skin.price)
+            .putStringSet("owned_skins", owned)
+            .putString("selected_skin", skin.id)
+            .apply()
+        return true
+    }
+
+    fun unlockSkin(skin: Skin): Boolean {
+        val owned = HashSet<String>(prefs.getStringSet("owned_skins", emptySet()) ?: emptySet())
+        if (skin.id in owned) return false
+        owned.add(skin.id)
+        prefs.edit()
+            .putStringSet("owned_skins", owned)
+            .putString("selected_skin", skin.id)
+            .apply()
+        return true
+    }
+
+    fun selectSkin(skin: Skin) {
+        val owned = HashSet<String>(prefs.getStringSet("owned_skins", emptySet()) ?: emptySet())
+        owned.add("chef")
+        if (skin.id in owned) {
+            prefs.edit().putString("selected_skin", skin.id).apply()
+        }
     }
 }

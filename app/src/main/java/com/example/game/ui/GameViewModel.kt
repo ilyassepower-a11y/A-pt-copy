@@ -212,6 +212,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun buySkin(skin: Skin) {
+        if (shopRepository.buySkin(skin)) {
+            sfx.playBuy()
+            _shop.value = shopRepository.load()
+        }
+    }
+
+    fun equipSkin(skin: Skin) {
+        shopRepository.selectSkin(skin)
+        _shop.value = shopRepository.load()
+    }
+
+    // Returns true when the secret code is right (the admin skin is unlocked and equipped)
+    fun unlockAdminSkin(code: String): Boolean {
+        if (!code.trim().equals(ADMIN_CODE, ignoreCase = true)) return false
+        if (shopRepository.unlockSkin(Skin.ZYNOX)) {
+            sfx.playMilestone()
+        }
+        _shop.value = shopRepository.load()
+        return true
+    }
+
     fun claimMilestone(milestone: Milestone) {
         if (!milestone.isDone(_saveData.value)) return
         if (shopRepository.claim(milestone)) {

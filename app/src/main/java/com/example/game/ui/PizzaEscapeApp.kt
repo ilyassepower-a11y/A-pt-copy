@@ -29,6 +29,7 @@ fun PizzaEscapeApp(
     val shop by viewModel.shop.collectAsState()
 
     var showShop by remember { mutableStateOf(false) }
+    var showSkins by remember { mutableStateOf(false) }
     var showMilestones by remember { mutableStateOf(false) }
 
     // The HUD only needs to refresh ~10 times per second (the canvas redraws every frame)
@@ -51,6 +52,7 @@ fun PizzaEscapeApp(
                     shop = shop,
                     hasClaimable = hasClaimable,
                     onShop = { showShop = true },
+                    onSkins = { showSkins = true },
                     onMilestones = { showMilestones = true },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -60,7 +62,7 @@ fun PizzaEscapeApp(
             }
             GameState.RUNNING, GameState.PAUSED, GameState.GAME_OVER, GameState.VICTORY -> {
                 // Game Canvas (redraws every frame without recomposing the whole screen)
-                GameCanvasView(engine = engine, tick = tickState)
+                GameCanvasView(engine = engine, tick = tickState, skinId = shop.selectedSkin)
 
                 // Overlay HUD & Controls
                 GameOverlay(
@@ -117,6 +119,15 @@ fun PizzaEscapeApp(
                 shop = shop,
                 onBuy = { viewModel.buyItem(it) },
                 onDismiss = { showShop = false }
+            )
+        }
+        if (showSkins) {
+            SkinShopDialog(
+                shop = shop,
+                onBuy = { viewModel.buySkin(it) },
+                onEquip = { viewModel.equipSkin(it) },
+                onAdminCode = { viewModel.unlockAdminSkin(it) },
+                onDismiss = { showSkins = false }
             )
         }
         if (showMilestones) {

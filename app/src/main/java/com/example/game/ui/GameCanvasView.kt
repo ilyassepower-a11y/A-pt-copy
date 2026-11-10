@@ -10,6 +10,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -17,6 +19,10 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import com.example.R
 import com.example.game.engine.PizzaEscapeEngine
 import com.example.game.model.CollectibleType
 import com.example.game.model.ParticleShape
@@ -25,6 +31,7 @@ import com.example.game.model.PursuerState
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -32,8 +39,19 @@ import kotlin.random.Random
 fun GameCanvasView(
     engine: PizzaEscapeEngine,
     tick: State<Long>,
+    skinId: String = "chef",
     modifier: Modifier = Modifier
 ) {
+    // The classic chef is drawn by code; every other skin is a picture
+    val skinImage: ImageBitmap? = when (skinId) {
+        "hero_chef" -> ImageBitmap.imageResource(R.drawable.skin_hero)
+        "brave" -> ImageBitmap.imageResource(R.drawable.skin_brave)
+        "zynox" -> ImageBitmap.imageResource(R.drawable.skin_zynox)
+        "hedgehog" -> ImageBitmap.imageResource(R.drawable.skin_hedgehog)
+        "skeleton" -> ImageBitmap.imageResource(R.drawable.skin_skeleton)
+        else -> null
+    }
+
     Canvas(modifier = modifier.fillMaxSize()) {
         // Read the frame tick here so only the drawing is redone each frame
         tick.value
@@ -82,7 +100,7 @@ fun GameCanvasView(
             }
 
             // Player (Peppino-style Chef)
-            drawPlayer(engine)
+            drawPlayer(engine, skinImage)
 
             // Pursuer (Pizzaface)
             drawPursuer(engine)
@@ -345,7 +363,7 @@ private fun DrawScope.drawParticle(
     }
 }
 
-private fun DrawScope.drawPlayer(engine: PizzaEscapeEngine) {
+private fun DrawScope.drawPlayer(engine: PizzaEscapeEngine, skin: ImageBitmap? = null) {
     val p = engine.player
     val cx = p.x
     val cy = p.y
@@ -359,6 +377,35 @@ private fun DrawScope.drawPlayer(engine: PizzaEscapeEngine) {
             radius = 36f,
             center = Offset(cx, cy - 28f)
         )
+    }
+
+    // A picture skin replaces the drawn chef
+    if (skin != null) {
+        if (p.isTaunting) {
+            drawCircle(Color(0xFFFFF176), 44f, Offset(cx, cy - 42f), style = Stroke(4f))
+        }
+        val spriteH = 88f
+        val spriteW = spriteH * skin.width.toFloat() / skin.height.toFloat()
+        val running = p.isGrounded && Math.abs(p.vx) > 20f
+        val bobY = if (running) sin(p.runCycle * 2f) * 3f else 0f
+        val squash = if (p.isSliding) 0.62f else 1f
+        val tilt = if (p.isDashing || p.machLevel >= 3) 10f else if (running) sin(p.runCycle) * 3f else 0f
+        withTransform({
+            translate(left = cx, top = cy + bobY)
+            scale(scaleX = facing, scaleY = 1f, pivot = Offset.Zero)
+            rotate(degrees = tilt, pivot = Offset.Zero)
+        }) {
+            drawImage(
+                image = skin,
+                dstOffset = IntOffset((-spriteW / 2f).roundToInt(), (-spriteH * squash).roundToInt()),
+                dstSize = IntSize(spriteW.roundToInt(), (spriteH * squash).roundToInt()),
+                filterQuality = FilterQuality.Medium
+            )
+        }
+        if (p.invincibilityTimer > 0f) {
+            drawCircle(Color(0x8800E5FF), 52f, Offset(cx, cy - 42f), style = Stroke(5f))
+        }
+        return
     }
 
     // Taunt Heroic Pose!
@@ -451,11 +498,6 @@ private fun DrawScope.drawPlayer(engine: PizzaEscapeEngine) {
         end = Offset(eyeX + 12f, mustacheY),
         strokeWidth = 6f
     )
-
-    // Wide open screaming mouth if pursuer is near!
-    if (engine.stats.pursuerDistance < 350f) {
-        drawCircle(Color(0xFFD32F2F), 5f, Offset(eyeX, mustacheY + 6f))
-    }
 }
 
 private fun DrawScope.drawPursuer(engine: PizzaEscapeEngine) {
@@ -467,23 +509,6 @@ private fun DrawScope.drawPursuer(engine: PizzaEscapeEngine) {
 
     val isStunned = pursuer.state == PursuerState.STUNNED
     val isEnraged = pursuer.state == PursuerState.ENRAGED
-
-    // Dark pulsing aura
-    val pulse = 1f + 0.06f * sin(phase * 5f)
-    val auraColor = when {
-        isStunned -> Color(0x55FFEB3B)
-        isEnraged -> Color(0xCCD50000)
-        else -> Color(0x99B71C1C)
-    }
-    drawCircle(
-        brush = Brush.radialGradient(
-            colors = listOf(auraColor, Color.Transparent),
-            center = Offset(cx, cy),
-            radius = r * 2.0f * pulse
-        ),
-        radius = r * 2.0f * pulse,
-        center = Offset(cx, cy)
-    )
 
     val outline = Color(0xFF140703)
     val crustColor = when {
